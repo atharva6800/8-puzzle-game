@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>8 Puzzle Game</title>
+
+<style>
+body {
+    background:#111;
+    color:white;
+    font-family:Arial;
+    text-align:center;
+}
+
+.grid {
+    width:306px;
+    height:306px;
+    margin:20px auto;
+    position:relative;
+}
+
+.tile {
+    width:100px;
+    height:100px;
+    position:absolute;
+    background:#1e90ff;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    font-size:30px;
+    border-radius:10px;
+    transition: all 0.25s ease-in-out; /* 🔥 smooth movement */
+    cursor:pointer;
+}
+
+.blank { background:#333; }
+
+.miniGrid {
+    display:grid;
+    grid-template-columns:repeat(3,60px);
+    gap:5px;
+}
+
+.miniTile {
+    width:60px;
+    height:60px;
+    background:#1e90ff;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+}
+
+.miniBlank { background:#333; }
+
+</style>
+</head>
+
+<body>
+
+<h1>🧩 8 Puzzle Game</h1>
+
+<div style="display:flex; justify-content:center; gap:40px;">
+    <div>
+        <h3>Initial</h3>
+        <div id="initial" class="miniGrid"></div>
+    </div>
+
+    <div style="font-size:40px;">➡</div>
+
+    <div>
+        <h3>Goal</h3>
+        <div id="goal" class="miniGrid"></div>
+    </div>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<button onclick="restart()">Restart</button>
+<button onclick="hint()">Hint</button>
+<button onclick="solveAnimation()">Auto Solve</button>
+
+<h3 id="info"></h3>
+<h3 id="compare"></h3>
+
+<script>
+let board=[];
+let initialState=[];
+let moves=0;
+
+function start(){
+    moves=0;
+    board=[1,2,3,4,5,6,7,8,0];
+
+    for(let i=0;i<30;i++){
+        let n=getNeighbors(board);
+        board=n[Math.floor(Math.random()*n.length)];
+    }
+
+    initialState=[...board];
+    drawMini();
+    draw();
+}
+
+function draw(){
+    let grid=document.getElementById("grid");
+
+    // DO NOT clear grid (important for animation)
+    grid.innerHTML="";
+
+    board.forEach((n,i)=>{
+        let d=document.createElement("div");
+        d.className="tile"+(n==0?" blank":"");
+        d.innerText=n==0?"":n;
+
+        let x=i%3;
+        let y=Math.floor(i/3);
+
+        d.style.left=(x*102)+"px";
+        d.style.top=(y*102)+"px";
+
+        d.onclick=()=>move(i);
+
+        grid.appendChild(d);
+    });
+
+    document.getElementById("info").innerText="Moves: "+moves;
+}
+
+function animateMove(oldBoard,newBoard){
+    let grid=document.getElementById("grid");
+
+    let tiles=[...grid.children];
+
+    newBoard.forEach((val,i)=>{
+        let tile = tiles.find(t=>t.innerText==val);
+        if(tile){
+            let x=i%3;
+            let y=Math.floor(i/3);
+            tile.style.left=(x*102)+"px";
+            tile.style.top=(y*102)+"px";
+        }
+    });
+}
+
+// ================= MOVE =================
+
+function move(i){
+    let b=board.indexOf(0);
+    let valid=[b-1,b+1,b-3,b+3];
+
+    if(valid.includes(i)){
+        let newBoard=[...board];
+        [newBoard[i],newBoard[b]]=[newBoard[b],newBoard[i]];
+
+        animateMove(board,newBoard);
+
+        setTimeout(()=>{
+            board=newBoard;
+            moves++;
+            draw();
+
+            if(isGoal(board)){
+                showComparison();
+            }
+        },250);
+    }
+}
+
+// ================= AI =================
+
+function solve(state){
+    let visited=new Set();
+    let queue=[[state,[]]];
+
+    while(queue.length){
+        let [curr,path]=queue.shift();
+
+        if(isGoal(curr)) return path.concat([curr]);
+
+        visited.add(curr.toString());
+
+        for(let n of getNeighbors(curr)){
+            if(!visited.has(n.toString())){
+                queue.push([n,path.concat([curr])]);
+            }
+        }
+    }
+}
+
+// ================= ANIMATION =================
+
+function solveAnimation(){
+    let path=solve(initialState);
+
+    let i=0;
+    let interval=setInterval(()=>{
+        animateMove(board,path[i]);
+
+        setTimeout(()=>{
+            board=path[i];
+            draw();
+        },200);
+
+        i++;
+
+        if(i>=path.length){
+            clearInterval(interval);
+            showComparison(path.length);
+        }
+    },400);
+}
+
+// ================= MINI =================
+
+function drawMini(){
+    let goal=[1,2,3,4,5,6,7,8,0];
+
+    let init=document.getElementById("initial");
+    init.innerHTML="";
+    initialState.forEach(n=>{
+        let d=document.createElement("div");
+        d.className="miniTile"+(n==0?" miniBlank":"");
+        d.innerText=n==0?"":n;
+        init.appendChild(d);
+    });
+
+    let g=document.getElementById("goal");
+    g.innerHTML="";
+    goal.forEach(n=>{
+        let d=document.createElement("div");
+        d.className="miniTile"+(n==0?" miniBlank":"");
+        d.innerText=n==0?"":n;
+        g.appendChild(d);
+    });
+}
+
+// ================= EXTRA =================
+
+function showComparison(aiMoves){
+    let optimal=aiMoves || solve(initialState).length;
+
+    document.getElementById("compare").innerText =
+        "Your Moves: "+moves+" | AI Optimal: "+optimal;
+}
+
+function hint(){
+    let n=getNeighbors(board);
+    n.sort((a,b)=>heuristic(a)-heuristic(b));
+    let next=n[0];
+
+    animateMove(board,next);
+
+    setTimeout(()=>{
+        board=next;
+        moves++;
+        draw();
+    },250);
+}
+
+// ================= HELPERS =================
+
+function getNeighbors(s){
+    let res=[];
+    let b=s.indexOf(0);
+    let x=b%3, y=Math.floor(b/3);
+
+    let dir=[[1,0],[-1,0],[0,1],[0,-1]];
+
+    dir.forEach(d=>{
+        let nx=x+d[0], ny=y+d[1];
+        if(nx>=0&&nx<3&&ny>=0&&ny<3){
+            let n=[...s];
+            let idx=ny*3+nx;
+            n[b]=n[idx];
+            n[idx]=0;
+            res.push(n);
+        }
+    });
+
+    return res;
+}
+
+function heuristic(s){
+    let d=0;
+    for(let i=0;i<9;i++){
+        let v=s[i];
+        if(v!=0){
+            let tx=(v-1)%3;
+            let ty=Math.floor((v-1)/3);
+            let x=i%3;
+            let y=Math.floor(i/3);
+            d+=Math.abs(x-tx)+Math.abs(y-ty);
+        }
+    }
+    return d;
+}
+
+function isGoal(s){
+    return s.toString()=="1,2,3,4,5,6,7,8,0";
+}
+
+function restart(){
+    start();
+}
+
+start();
+</script>
+
+</body>
+</html>
